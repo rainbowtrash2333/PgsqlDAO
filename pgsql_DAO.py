@@ -30,8 +30,6 @@ class DAO:
 
         self.params =db
         
-
-
     @decorator_error
     def connect(self):
         conn = None
@@ -39,26 +37,41 @@ class DAO:
         self.conn = psycopg2.connect(**self.params)
         self.cur = self.conn.cursor()
             
-
     @decorator_error
-    def create_table(self,table_name):
+    def is_table_exists(self,table_name):
         exists = False
         self.cur.execute("select exists(select relname from pg_class where relname='" + table_name + "')")
         exists = self.cur.fetchone()[0]
-        if not exists:
-            print("create table")
+        return exists
+
+    @decorator_error
+    def create_table(self,table_name):
+        if not self.is_table_exists(table_name):
+            print("create table: "+table_name)
             f = open("create_table.sql", "r")
             command=f.read()
             self.cur.execute(command)
     
     @decorator_error
+    def drop_table(self,table_name):
+        if not self.is_table_exists(table_name):
+            print("drop table: "+table_name)
+            self.cur.execute("DROP TABLE IF EXISTS "+table_name)
+    
+    # @decorator_error
     def insert(self,table_name,record):
-        postgres_insert_query = """ INSERT INTO """+table_name+""" (ID, MODEL, PRICE) VALUES (%s,%s,%s)"""
+        postgres_insert_query =""" INSERT INTO """+table_name+""" (ID, PASSWD) VALUES (%s,%s)"""
         self.cur.execute(postgres_insert_query, record)
+    
+    def select_all(self,table_name, row_count=100):
+        postgres_select_query = """ Select * From """+table_name+""" LIMIT """+str(row_count)
+        self.cur.execute(postgres_select_query)
+        records = self.cur.fetchall()
+        print(records)
     
     @decorator_error
     def commit(self):
-        self.cur.commit()
+        self.conn.commit()
     
     
     @decorator_error
@@ -68,8 +81,25 @@ class DAO:
             self.cur.close()
             self.conn.close()
             
+    def innert_data_from_txt(self,table_name,filepath='data.txt',encode='utf-8',ignore_first_line = True):
+        with open(file=filepath,mode='r',encoding=encode ) as data:
+            line = data.readline()
+            if ignore_first_line:
+                line = data.readline()
+            while line is not None and line !="":
+                record=tuple(line.strip().split("|"))
+                self.insert(table_name=table_name,record=record)
+                line = data.readline()
+                
+            
 if __name__ == "__main__":
+    table_name = 'USERS'
     dao = DAO()
     dao.connect()
-    dao.create_table('TABLENAME')
+    dao.drop_table(table_name)
+    dao.create_table(table_name)
+    dao.insert(table_name,("Tda","fds123"))
+    dao.innert_data_from_txt(table_name=table_name,filepath='data.txt',ignore_first_line=True)
+    dao.commit()
+    dao.select_all(table_name)
     dao.close()
